@@ -27,10 +27,10 @@
 #define TF_TEAM_RED			2
 
 #define SOUND_10SEC			"vo/announcer_ends_10sec.mp3"
-#define SOUND_9SEC			"vo/announcer_ends_9sec.mp3"
-#define SOUND_8SEC			"vo/announcer_ends_8sec.mp3"
-#define SOUND_7SEC			"vo/announcer_ends_7sec.mp3"
-#define SOUND_6SEC			"vo/announcer_ends_6sec.mp3"
+//#define SOUND_9SEC			"vo/announcer_ends_9sec.mp3"
+//#define SOUND_8SEC			"vo/announcer_ends_8sec.mp3"
+//#define SOUND_7SEC			"vo/announcer_ends_7sec.mp3"
+//#define SOUND_6SEC			"vo/announcer_ends_6sec.mp3"
 #define SOUND_5SEC			"vo/announcer_ends_5sec.mp3"
 #define SOUND_4SEC			"vo/announcer_ends_4sec.mp3"
 #define SOUND_3SEC			"vo/announcer_ends_3sec.mp3"
@@ -117,8 +117,9 @@ public void OnPluginStart()
 	
 	// H O O K S //
 	HookEvent("teamplay_round_start", teamplay_round_start);
-	HookEvent("teamplay_setup_finished", teamplay_setup_finished);
+	HookEvent("arena_round_start", arena_round_start);
 	HookEvent("player_death", Player_Death);
+	HookEvent("player_spawn", player_spawn); 
 	
 	// H U D   E L E M E N T S //
 	hudLRTimer = CreateHudSynchronizer();
@@ -218,15 +219,23 @@ public teamplay_round_start(Handle:event, const String:name[], bool:dontBroadcas
 	CreateStaleMate();
 		
 	timerTime = GetConVarFloat(g_jbTime);
+		
+	for (int i = 0; i <= MaxClients; i++)
+	{
+		if(IsValidClient(i))
+		{
+			StripAmmo(i);
+		}
+	}
 }
 
-/////////////////////////
-// S E T U P   E N D S //
-/////////////////////////
+/////////////////////////////
+// R O U N D   B E G I N S //
+/////////////////////////////
 //
-// - When the setup ends, exec the set commands
+// - When the round starts, exec the set commands
 //
-public teamplay_setup_finished(Handle:event, const String:name[], bool:dontBroadcast)
+public arena_round_start(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	char buffer[32][128]; char current[256];
 	GetConVarString(g_jbExecCommands, current, sizeof(current));
@@ -234,6 +243,87 @@ public teamplay_setup_finished(Handle:event, const String:name[], bool:dontBroad
 	
 	for (int i = 0; i < sizeof(buffer); i++)
 		ServerCommand(buffer[i]);
+}
+
+/////////////////////////////
+// P L A Y E R   S P A W N //
+/////////////////////////////
+//
+// - When a player spawns
+//
+public player_spawn(Handle:event, const String:name[], bool:dontBroadcast)
+{
+	new client = GetClientOfUserId(GetEventInt(event, "userid")); // Get client
+	StripAmmo(client);
+}
+
+/////////////////////////
+// S T R I P   A M M O //
+/////////////////////////
+// -
+// - Strip all ammo from a player
+// -
+public StripAmmo(int client)
+{
+	new primary = GetPlayerWeaponSlot(client, 0);
+	new secondary = GetPlayerWeaponSlot(client, 1);
+	new melee = GetPlayerWeaponSlot(client, 2);
+	
+	if (!IsValidEntity(primary))
+	{
+		PrintToChatAll("Invalid primary weapon slot");
+	}
+	else
+	{
+		char name[64];
+		GetEdictClassname(primary, name, sizeof(name));
+		PrintToChatAll("primary: %s", name);
+		new iOffset = GetEntProp(primary, Prop_Send, "m_iPrimaryAmmoType", 1)*4;
+		new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
+		SetEntData(client, iAmmoTable+iOffset, 0, 4, true);
+		
+		// Don't strip clip from a weapon that doesn't have a clip!
+		if(!StrEqual(name, "tf_weapon_sniperrifle") && !StrEqual(name, "tf_weapon_flamethrower") && !StrEqual(name, "tf_weapon_minigun"))
+		{
+			new iAmmoClip = FindSendPropInfo("CTFWeaponBase", "m_iClip1");
+			SetEntData(primary, iAmmoClip, 0, 4, true);
+		}
+	}
+	
+	if (!IsValidEntity(secondary))
+	{
+		PrintToChatAll("Invalid secondary weapon slot");
+	}
+	else
+	{
+		char name[64];
+		GetEdictClassname(secondary, name, sizeof(name));
+		PrintToChatAll("secondary: %s", name);
+		new iOffset = GetEntProp(secondary, Prop_Send, "m_iPrimaryAmmoType", 1)*4;
+		new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
+		SetEntData(client, iAmmoTable+iOffset, 0, 4, true);
+		
+		// Don't strip clip from a weapon that doesn't have a clip!
+		if(!StrEqual(name, "tf_weapon_flaregun") && !StrEqual(name, "tf_weapon_flaregun_revenge"))
+		{
+			new iAmmoClip = FindSendPropInfo("CTFWeaponBase", "m_iClip1");
+			SetEntData(secondary, iAmmoClip, 0, 4, true);
+		}
+	}
+	
+	if (!IsValidEntity(melee))
+	{
+		PrintToChatAll("Invalid melee weapon slot");
+	}
+	else
+	{
+		char name[64];
+		GetEdictClassname(melee, name, sizeof(name));
+		PrintToChatAll("melee: %s", name);
+		new iOffset = GetEntProp(melee, Prop_Send, "m_iPrimaryAmmoType", 1)*4;
+		new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
+		SetEntData(client, iAmmoTable+iOffset, 0, 4, true);
+	}
 }
 
 //////////////////////////////
@@ -539,10 +629,10 @@ Precache()
 {
 	// S O U N D S //
 	PrecacheSound(SOUND_10SEC, true);
-	PrecacheSound(SOUND_9SEC, true);
-	PrecacheSound(SOUND_8SEC, true);
-	PrecacheSound(SOUND_7SEC, true);
-	PrecacheSound(SOUND_6SEC, true);
+	//PrecacheSound(SOUND_9SEC, true);
+	//PrecacheSound(SOUND_8SEC, true);
+	//PrecacheSound(SOUND_7SEC, true);
+	//PrecacheSound(SOUND_6SEC, true);
 	PrecacheSound(SOUND_5SEC, true);
 	PrecacheSound(SOUND_4SEC, true);
 	PrecacheSound(SOUND_3SEC, true);
