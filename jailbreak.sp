@@ -222,7 +222,7 @@ public teamplay_round_start(Handle:event, const String:name[], bool:dontBroadcas
 		
 	for (int i = 0; i <= MaxClients; i++)
 	{
-		if(IsValidClient(i))
+		if(IsValidClient(i) && GetClientTeam(i) == TF_TEAM_RED)
 		{
 			StripAmmo(i);
 		}
@@ -254,7 +254,8 @@ public arena_round_start(Handle:event, const String:name[], bool:dontBroadcast)
 public player_spawn(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	new client = GetClientOfUserId(GetEventInt(event, "userid")); // Get client
-	StripAmmo(client);
+	if(GetClientTeam(client) == TF_TEAM_RED)
+    StripAmmo(client);
 }
 
 /////////////////////////
