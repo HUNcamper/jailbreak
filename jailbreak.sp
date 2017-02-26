@@ -27,10 +27,6 @@
 #define TF_TEAM_RED			2
 
 #define SOUND_10SEC			"vo/announcer_ends_10sec.mp3"
-//#define SOUND_9SEC			"vo/announcer_ends_9sec.mp3"
-//#define SOUND_8SEC			"vo/announcer_ends_8sec.mp3"
-//#define SOUND_7SEC			"vo/announcer_ends_7sec.mp3"
-//#define SOUND_6SEC			"vo/announcer_ends_6sec.mp3"
 #define SOUND_5SEC			"vo/announcer_ends_5sec.mp3"
 #define SOUND_4SEC			"vo/announcer_ends_4sec.mp3"
 #define SOUND_3SEC			"vo/announcer_ends_3sec.mp3"
@@ -47,8 +43,9 @@
 // Convars
 Handle g_jbTime;
 Handle g_lrTime;
-Handle g_jbSetupTime;
 Handle g_jbExecCommands;
+Handle g_jbIsEnabled;
+Handle g_jbSoulRemove;
 
 // Global variables
 bool isLRActive;
@@ -57,7 +54,7 @@ float timerTime;
 //char LRtext[32];
 
 // Entity variables (they store the entity ID, not the entity itself)
-new ent_stalemate, ent_normaltimer;
+new ent_stalemate;
 
 // HUD elements
 Handle hudLRTimer;
@@ -65,9 +62,6 @@ Handle hudTimer;
 
 // Client Arrays
 Handle jbHUD[MAXPLAYERS + 1]; // Each player's HUD timer
-
-// Timers
-Handle globalTimer;
 
 public Plugin myinfo = 
 {
@@ -105,8 +99,9 @@ public void OnPluginStart()
 	// C O N V A R S //
 	g_jbTime = CreateConVar("jb_timer", "600", "Jailbreak timer time (in seconds)");
 	g_lrTime = CreateConVar("jb_timer_lr", "120", "Jailbreak LR timer time (in seconds)");
-	g_jbSetupTime = CreateConVar("jb_timer_setup", "10", "Setup timer (in seconds)");
 	g_jbExecCommands = CreateConVar("jb_commands_after_setup", "sm_say setup ended!", "Commands to execute after setup time ended");
+	g_jbIsEnabled = CreateConVar("jb_enabled", "0", "Is the plugin enabled");
+	g_jbSoulRemove = CreateConVar("jb_remove_souls", "1", "Should the plugin remove the flying souls (only in halloween mode)?");
 	
 	// V A R I A B L E S //
 	isLRActive = false;
@@ -114,6 +109,8 @@ public void OnPluginStart()
 	
 	// A D M I N   C O M M A N D S //
 	RegAdminCmd("sm_forcestalemate", Command_JB_ForceStaleMate, ADMFLAG_ROOT, "sm_forcestalemate");
+	RegAdminCmd("sm_stripammo", Command_JB_StripAmmo, ADMFLAG_ROOT, "sm_stripammo <Player>");
+	RegAdminCmd("sm_reloadjbconfig", Command_JB_ReloadConfig, ADMFLAG_ROOT, "sm_reloadjbconfig");
 	
 	// H O O K S //
 	HookEvent("teamplay_round_start", teamplay_round_start);
@@ -136,9 +133,11 @@ public void OnPluginStart()
 	PrintToChatAll("\x05JailBreak Plugin\x01 loaded, restarting game");
 	ServerCommand("mp_restartgame 1");
 	
-	globalTimer = CreateTimer(1.0, UpdateTimers, _, TIMER_REPEAT);
+	CreateTimer(1.0, UpdateTimers, _, TIMER_REPEAT);
 	
 	Precache();
+	
+	reloadConfig();
 }
 
 ///////////////////////////////
@@ -158,22 +157,31 @@ public reloadConfig()
 	
 	new Handle:kv = KvizCreateFromFile("maps", config);
 	
-	for (new i = 1; KvizExists(kv, ":nth-child(%i)", i); i++)
+	if(kv != INVALID_HANDLE)
 	{
-		decl String:map[32], Float:ctime, Float:csetuptime, Float:clrtime;
-		
-		KvizGetStringExact(kv, map, sizeof(map), ":nth-child(%i):key", i);
-		if(StrEqual(map, currmap, false))
+		for (new i = 1; KvizExists(kv, ":nth-child(%i)", i); i++)
 		{
-			if(!KvizGetFloatExact(kv, ctime, ":nth-child(%i).roundtime", i)) ctime=GetConVarFloat(g_jbTime);
-			if(!KvizGetFloatExact(kv, csetuptime, ":nth-child(%i).setuptime", i)) ctime=GetConVarFloat(g_jbSetupTime);
-			if(!KvizGetFloatExact(kv, clrtime, ":nth-child(%i).lrtime", i)) ctime=GetConVarFloat(g_lrTime);
-			PrintToChatAll("found and loaded");
-			break;
+			decl String:map[32], Float:ctime, String:caftersetup[256], Float:clrtime;
+			int cenabled;
+			
+			KvizGetStringExact(kv, map, sizeof(map), ":nth-child(%i):key", i);
+			if(StrEqual(map, currmap, false))
+			{
+				if(KvizGetFloatExact(kv, ctime, ":nth-child(%i).roundtime", i)) SetConVarFloat(g_jbTime, ctime);
+				if(KvizGetFloatExact(kv, clrtime, ":nth-child(%i).lrtime", i)) SetConVarFloat(g_lrTime, clrtime);
+				if(KvizGetStringExact(kv, caftersetup, sizeof(caftersetup), ":nth-child(%i).aftersetup", i)) SetConVarString(g_jbExecCommands, caftersetup);
+				if(KvizGetNumExact(kv, cenabled, ":nth-child(%i).enabled", i)) SetConVarInt(g_jbIsEnabled, cenabled);
+				PrintToServer("[JAILBREAK] Map config present and loaded.");
+				break;
+			}
 		}
+		
+		KvizClose(kv);
 	}
-	
-	KvizClose(kv);
+	else
+	{
+		PrintToServer("[JAILBREAK] There is no map config present!");
+	}
 }
 
 ////////////////////////////////////
@@ -188,20 +196,106 @@ public OnClientPostAdminCheck(client)
 ////////////////////
 // D R A W  H U D //
 ////////////////////
+//
+// - Draw the timer hud
+//
 public Action:DrawHud(Handle:timer, any:client)
 {
-	if(IsValidClient(client))
+	if(GetConVarBool(g_jbIsEnabled))
 	{
-		SetHudTextParams(-1.0, 0.10, 2.0, 0, 0, 255, 255);
-		ShowSyncHudText(client, hudTimer, "%s", FormatTimer(timerTime));
-		
-		if(isLRActive)
+		if(IsValidClient(client))
 		{
-			SetHudTextParams(-1.0, 0.15, 2.0, 255, 0, 0, 255);
-			ShowSyncHudText(client, hudLRTimer, "LR timer: %s", FormatTimer(LRtime));
+			SetHudTextParams(-1.0, 0.10, 2.0, 0, 0, 255, 255);
+			ShowSyncHudText(client, hudTimer, "%s", FormatTimer(timerTime));
+			
+			if(isLRActive)
+			{
+				SetHudTextParams(-1.0, 0.15, 2.0, 255, 0, 0, 255);
+				ShowSyncHudText(client, hudLRTimer, "LR timer: %s", FormatTimer(LRtime));
+			}
 		}
 	}
 	jbHUD[client] = CreateTimer(1.0, DrawHud, client);
+}
+
+/////////////////////////////
+// D E L E T E   S O U L S //
+/////////////////////////////
+//
+// - Delete the souls when killed
+//
+public void OnEntityCreated(int iEnt,char classname[32])
+{
+	if(GetConVarBool(g_jbIsEnabled))
+	{
+		if(GetConVarBool(g_jbSoulRemove))
+		{
+		    if(IsValidEntity(iEnt) && StrEqual(classname,"halloween_souls_pack"))
+		    {
+		        AcceptEntityInput(iEnt,"Kill");
+		    }
+	   	}
+   	}
+}
+
+/////////////////////////////////////////
+// C M D :   R E L O A D   C O N F I G //
+/////////////////////////////////////////
+//
+// - Reload map config
+//
+public Action:Command_JB_ReloadConfig(client, args)
+{
+	reloadConfig();
+	return Plugin_Handled;
+}
+
+///////////////////////////////////
+// C M D :   S T R I P   A M M O //
+///////////////////////////////////
+//
+// - Strip ammo by command
+//
+public Action:Command_JB_StripAmmo(client, args)
+{
+	if(GetConVarBool(g_jbIsEnabled))
+	{
+		if (args != 1)
+		{
+			ReplyToCommand(client, "Usage: sm_stripammo <Player>");
+			return Plugin_Handled;
+		}
+		
+		decl String:buffer[64];
+		decl String:target_name[MAX_NAME_LENGTH];
+		decl target_list[MAXPLAYERS];
+		decl target_count;
+		decl bool:tn_is_ml;
+		
+		//Get target
+		GetCmdArg(1, buffer, sizeof(buffer));
+		
+		if ((target_count = ProcessTargetString(
+				buffer,
+				client,
+				target_list,
+				MAXPLAYERS,
+				COMMAND_FILTER_ALIVE,
+				target_name,
+				sizeof(target_name),
+				tn_is_ml)) <= 0)
+		{
+			ReplyToTargetError(client, target_count);
+			return Plugin_Handled;
+		}
+		
+		// Strip ammo
+		for (new i = 0; i < target_count; i++)
+		{
+			StripAmmo(target_list[i]);
+		}
+	}
+	
 	return Plugin_Handled;
 }
 
@@ -219,12 +313,15 @@ public teamplay_round_start(Handle:event, const String:name[], bool:dontBroadcas
 	CreateStaleMate();
 		
 	timerTime = GetConVarFloat(g_jbTime);
-		
-	for (int i = 0; i <= MaxClients; i++)
+	
+	if(GetConVarBool(g_jbIsEnabled))
 	{
-		if(IsValidClient(i) && GetClientTeam(i) == TF_TEAM_RED)
+		for (int i = 0; i <= MaxClients; i++)
 		{
-			StripAmmo(i);
+			if(IsValidClient(i) && GetClientTeam(i) == TF_TEAM_RED)
+			{
+				StripAmmo(i);
+			}
 		}
 	}
 }
@@ -237,12 +334,15 @@ public teamplay_round_start(Handle:event, const String:name[], bool:dontBroadcas
 //
 public arena_round_start(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	char buffer[32][128]; char current[256];
-	GetConVarString(g_jbExecCommands, current, sizeof(current));
-	ExplodeString(current, ";", buffer, sizeof(buffer), sizeof(buffer[]));
-	
-	for (int i = 0; i < sizeof(buffer); i++)
-		ServerCommand(buffer[i]);
+	if(GetConVarBool(g_jbIsEnabled))
+	{
+		char buffer[32][128]; char current[256];
+		GetConVarString(g_jbExecCommands, current, sizeof(current));
+		ExplodeString(current, ";", buffer, sizeof(buffer), sizeof(buffer[]));
+		
+		for (int i = 0; i < sizeof(buffer); i++)
+			ServerCommand(buffer[i]);
+	}
 }
 
 /////////////////////////////
@@ -253,9 +353,12 @@ public arena_round_start(Handle:event, const String:name[], bool:dontBroadcast)
 //
 public player_spawn(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	new client = GetClientOfUserId(GetEventInt(event, "userid")); // Get client
-	if(GetClientTeam(client) == TF_TEAM_RED)
-    StripAmmo(client);
+	if(GetConVarBool(g_jbIsEnabled))
+	{
+		new client = GetClientOfUserId(GetEventInt(event, "userid")); // Get client
+		if(GetClientTeam(client) == TF_TEAM_RED)
+	    StripAmmo(client);
+   	}
 }
 
 /////////////////////////
@@ -266,64 +369,67 @@ public player_spawn(Handle:event, const String:name[], bool:dontBroadcast)
 // -
 public StripAmmo(int client)
 {
-	new primary = GetPlayerWeaponSlot(client, 0);
-	new secondary = GetPlayerWeaponSlot(client, 1);
-	new melee = GetPlayerWeaponSlot(client, 2);
-	
-	if (!IsValidEntity(primary))
+	if(GetConVarBool(g_jbIsEnabled))
 	{
-		PrintToChatAll("Invalid primary weapon slot");
-	}
-	else
-	{
-		char name[64];
-		GetEdictClassname(primary, name, sizeof(name));
-		PrintToChatAll("primary: %s", name);
-		new iOffset = GetEntProp(primary, Prop_Send, "m_iPrimaryAmmoType", 1)*4;
-		new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
-		SetEntData(client, iAmmoTable+iOffset, 0, 4, true);
+		new primary = GetPlayerWeaponSlot(client, 0);
+		new secondary = GetPlayerWeaponSlot(client, 1);
+		new melee = GetPlayerWeaponSlot(client, 2);
 		
-		// Don't strip clip from a weapon that doesn't have a clip!
-		if(!StrEqual(name, "tf_weapon_sniperrifle") && !StrEqual(name, "tf_weapon_flamethrower") && !StrEqual(name, "tf_weapon_minigun"))
+		if (!IsValidEntity(primary))
 		{
-			new iAmmoClip = FindSendPropInfo("CTFWeaponBase", "m_iClip1");
-			SetEntData(primary, iAmmoClip, 0, 4, true);
+			PrintToServer("[JAILBREAK] WARNING Invalid primary weapon slot: %i", primary);
 		}
-	}
-	
-	if (!IsValidEntity(secondary))
-	{
-		PrintToChatAll("Invalid secondary weapon slot");
-	}
-	else
-	{
-		char name[64];
-		GetEdictClassname(secondary, name, sizeof(name));
-		PrintToChatAll("secondary: %s", name);
-		new iOffset = GetEntProp(secondary, Prop_Send, "m_iPrimaryAmmoType", 1)*4;
-		new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
-		SetEntData(client, iAmmoTable+iOffset, 0, 4, true);
+		else
+		{
+			char name[64];
+			GetEdictClassname(primary, name, sizeof(name));
+			//PrintToChatAll("primary: %s", name);
+			new iOffset = GetEntProp(primary, Prop_Send, "m_iPrimaryAmmoType", 1)*4;
+			new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
+			SetEntData(client, iAmmoTable+iOffset, 0, 4, true);
+			
+			// Don't strip clip from a weapon that doesn't have a clip!
+			if(!StrEqual(name, "tf_weapon_sniperrifle") && !StrEqual(name, "tf_weapon_flamethrower") && !StrEqual(name, "tf_weapon_minigun"))
+			{
+				new iAmmoClip = FindSendPropInfo("CTFWeaponBase", "m_iClip1");
+				SetEntData(primary, iAmmoClip, 0, 4, true);
+			}
+		}
 		
-		// Don't strip clip from a weapon that doesn't have a clip!
-		if(!StrEqual(name, "tf_weapon_flaregun") && !StrEqual(name, "tf_weapon_flaregun_revenge"))
+		if (!IsValidEntity(secondary))
 		{
-			new iAmmoClip = FindSendPropInfo("CTFWeaponBase", "m_iClip1");
-			SetEntData(secondary, iAmmoClip, 0, 4, true);
+			PrintToServer("[JAILBREAK] WARNING Invalid secondary weapon slot: %i", secondary);
 		}
-	}
-	
-	if (!IsValidEntity(melee))
-	{
-		PrintToChatAll("Invalid melee weapon slot");
-	}
-	else
-	{
-		char name[64];
-		GetEdictClassname(melee, name, sizeof(name));
-		PrintToChatAll("melee: %s", name);
-		new iOffset = GetEntProp(melee, Prop_Send, "m_iPrimaryAmmoType", 1)*4;
-		new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
-		SetEntData(client, iAmmoTable+iOffset, 0, 4, true);
+		else
+		{
+			char name[64];
+			GetEdictClassname(secondary, name, sizeof(name));
+			//PrintToChatAll("secondary: %s", name);
+			new iOffset = GetEntProp(secondary, Prop_Send, "m_iPrimaryAmmoType", 1)*4;
+			new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
+			SetEntData(client, iAmmoTable+iOffset, 0, 4, true);
+			
+			// Don't strip clip from a weapon that doesn't have a clip!
+			if(!StrEqual(name, "tf_weapon_flaregun") && !StrEqual(name, "tf_weapon_flaregun_revenge"))
+			{
+				new iAmmoClip = FindSendPropInfo("CTFWeaponBase", "m_iClip1");
+				SetEntData(secondary, iAmmoClip, 0, 4, true);
+			}
+		}
+		
+		if (!IsValidEntity(melee))
+		{
+			PrintToServer("[JAILBREAK] WARNING Invalid melee weapon slot: %i", melee);
+		}
+		else
+		{
+			char name[64];
+			GetEdictClassname(melee, name, sizeof(name));
+			//PrintToChatAll("melee: %s", name);
+			new iOffset = GetEntProp(melee, Prop_Send, "m_iPrimaryAmmoType", 1)*4;
+			new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
+			SetEntData(client, iAmmoTable+iOffset, 0, 4, true);
+		}
 	}
 }
 
@@ -335,7 +441,8 @@ public StripAmmo(int client)
 // -
 public Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	CreateTimer(0.5, timer_teamcheck);
+	if(GetConVarBool(g_jbIsEnabled))
+		CreateTimer(0.5, timer_teamcheck);
 }
 
 //////////////////////////
@@ -448,11 +555,6 @@ public Action:UpdateTimers(Handle:timer)
 		LRtime--;
 }
 
-PlaySoundToAll(String:sound)
-{
-	EmitSoundToClient(client, SOUND_FAILED, client, _, _, _, 1.0);
-}
-
 
 /////////////////////////////////////
 // C R E A T E   S T A L E M A T E //
@@ -473,104 +575,10 @@ public CreateStaleMate()
 		AcceptEntityInput(ent_stalemate, "SetTeam");
 		if (!DispatchSpawn(ent_stalemate))
 			PrintToServer("[JAILBREAK] ENTITY ERROR Failed to dispatch stalemate entity");
-		else
-			PrintToServer("[JAILBREAK] Created stalemate entity");
+		//else
+			//PrintToServer("[JAILBREAK] Created stalemate entity");
 	}
 }
-
-// The code below is PROBABLY not needed.
-//
-///////////////////////////
-// K I L L   T I M E R S //
-///////////////////////////
-// -
-// - Kill all timer entities, if they already exist on the map, then add the custom ones.
-// -
-/*
-public KillTimerEnts()
-{
-	// Entity list to be removed
-	new String:ents[2][32];
-	ents[0] = "game_round_win";
-	ents[1] = "team_round_timer";
-	
-	char cls[32];
-	
-	// For debugging just remove the // before the lines
-	// Variables for debugging
-	//int checked = 0;
-	//int deleted = 0;
-	
-	// Roll through all the entities on the map
-	for(int i = 0; i <= GetMaxEntities() ; i++)
-	{
-		// Not valid, don't continue
-		if(!IsValidEntity(i))
-			continue;
-		
-		// Store classname in "cls"
-		GetEntityClassname(i, cls, sizeof(cls));
-		
-		for (int b = 0; b < sizeof(ents); b++)
-		{
-			//checked++;
-			
-			// If classname equals to one in the list
-			if(StrEqual(cls, ents[b], false))
-			{
-				RemoveEdict(i);
-				//deleted++;
-			}
-		}
-	}
-	
-	//PrintToChatAll("Checked: %i, deleted: %i", checked, deleted);
-	//PrintToChatAll("Creating map timer and winround entities");
-	
-	
-	// Stalemate entity, for triggering on round end
-	ent_stalemate = CreateEntityByName("game_round_win");
-	
-	if (IsValidEntity(ent_stalemate))
-	{
-		DispatchKeyValue(ent_stalemate, "force_map_reset", "1");
-		DispatchKeyValue(ent_stalemate, "targetname", "win_blue");
-		DispatchKeyValue(ent_stalemate, "teamnum", "0");
-		SetVariantInt(0);
-		AcceptEntityInput(ent_stalemate, "SetTeam");
-		if (!DispatchSpawn(ent_stalemate))
-			PrintToServer("[JAILBREAK] ENTITY ERROR Failed to dispatch stalemate entity");
-		else
-			PrintToServer("[JAILBREAK] Created stalemate entity");
-	}
-	
-	ent_normaltimer = CreateEntityByName("team_round_timer");
-	char jbtime[32];
-	char setuptime[32];
-	GetConVarString(g_jbTime, jbtime, sizeof(jbtime));
-	GetConVarString(g_jbSetupTime, setuptime, sizeof(setuptime));
-	
-	if (IsValidEntity(ent_normaltimer))
-	{
-		DispatchKeyValue(ent_normaltimer, "targetname", "timer_nobomb");
-		DispatchKeyValue(ent_normaltimer, "StartDisabled", "0");
-		DispatchKeyValue(ent_normaltimer, "start_paused", "0");
-		DispatchKeyValue(ent_normaltimer, "show_time_remaining", "1");
-		DispatchKeyValue(ent_normaltimer, "show_in_hud", "1");
-		DispatchKeyValue(ent_normaltimer, "reset_time", "1");
-		DispatchKeyValue(ent_normaltimer, "max_length", "121");
-		DispatchKeyValue(ent_normaltimer, "auto_countdown", "1");
-		DispatchKeyValue(ent_normaltimer, "timer_length", jbtime);
-		DispatchKeyValue(ent_normaltimer, "setup_length", setuptime);
-		DispatchSpawn(ent_normaltimer);
-		HookSingleEntityOutput(ent_normaltimer, "OnFinished", Hook_Timeout, true);
-		PrintToServer("[JAILBREAK] Created nobomb timer entity");
-		AcceptEntityInput(ent_normaltimer, "Enable");
-	}
-	else
-		PrintToServer("[JAILBREAK] Failed to create nobomb timer entity");
-}
-*/
 
 ///////////////////////////////////////
 // S T A L E M A T E   T R I G G E R //
@@ -594,14 +602,16 @@ public StaleMate()
 // -
 public Action:Command_JB_ForceStaleMate(client, args)
 {
-	if(IsValidEntity(ent_stalemate))
+	if(GetConVarBool(g_jbIsEnabled))
 	{
-		AcceptEntityInput(ent_stalemate, "RoundWin");
-		ReplyToCommand(client, "[JAILBREAK] Successfully forced stalemate");
+		if(IsValidEntity(ent_stalemate))
+		{
+			AcceptEntityInput(ent_stalemate, "RoundWin");
+			ReplyToCommand(client, "[JAILBREAK] Successfully forced stalemate");
+		}
+		else
+			ReplyToCommand(client, "[JAILBREAK] Could not find stalemate entity");
 	}
-	else
-		ReplyToCommand(client, "[JAILBREAK] Could not find stalemate entity");
-	
 	return Plugin_Handled;
 }
 
@@ -630,10 +640,6 @@ Precache()
 {
 	// S O U N D S //
 	PrecacheSound(SOUND_10SEC, true);
-	//PrecacheSound(SOUND_9SEC, true);
-	//PrecacheSound(SOUND_8SEC, true);
-	//PrecacheSound(SOUND_7SEC, true);
-	//PrecacheSound(SOUND_6SEC, true);
 	PrecacheSound(SOUND_5SEC, true);
 	PrecacheSound(SOUND_4SEC, true);
 	PrecacheSound(SOUND_3SEC, true);
