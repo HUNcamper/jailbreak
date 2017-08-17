@@ -19,6 +19,11 @@
 
 #define DEBUG
 
+// VoiceHook
+#undef REQUIRE_PLUGIN
+#include <voiceannounce_ex>
+#define REQUIRE_PLUGIN
+
 #define PLUGIN_AUTHOR "HUNcamper"
 #define PLUGIN_VERSION "1.0.0"
 
@@ -49,6 +54,7 @@ Handle g_jbSoulRemove;
 Handle g_jbTeamBalance;
 Handle g_jbAutoBalance;
 Handle g_jbAmmoRemove;
+Handle g_jbCrits;
 
 // Global variables
 bool isLRActive;
@@ -111,6 +117,7 @@ public void OnPluginStart()
 	g_jbAmmoRemove = CreateConVar("jb_remove_ammodrops", "1", "Should the plugin remove the ammo packs which are dropped upon death?");
 	g_jbTeamBalance = CreateConVar("jb_balance", "1", "Should the plugin balance the teams with the 1:3 ratio? (disallow reds from joining blue)");
 	g_jbAutoBalance = CreateConVar("jb_autobalance", "0", "Should the plugin autobalance the teams at the end of every round with the 1:3 ratio?");
+	g_jbCrits = CreateConVar("jb_crits", "1", "Should the plugin modify crits to be 100%?");
 	
 	// V A R I A B L E S //
 	isLRActive = false;
@@ -156,6 +163,34 @@ public void OnPluginStart()
 	Precache();
 	
 	reloadConfig();
+}
+
+/*
+#if defined _voiceannounceex_included_
+///////////////
+// V O I C E //
+///////////////
+public void OnClientSpeakingEx(client)
+{
+	PrintToChatAll("Nigga");
+}
+#endif
+*/
+
+///////////////////////////////
+// C R I T   M O D I F I E R //
+///////////////////////////////
+public Action:TF2_CalcIsAttackCritical(client, weapon, String:weaponname[], &bool:result)
+{
+	if (!GetConVarBool(g_jbCrits))
+	{
+		return Plugin_Continue;	
+	}
+	else
+	{
+		result = true;
+		return Plugin_Handled;	
+	}
 }
 
 ///////////////////////////////
@@ -258,6 +293,21 @@ public Action:DrawHud(Handle:timer, any:client)
 	}
 	
 	//jbHUD[client] = CreateTimer(1.0, DrawHud, client);
+}
+*/
+
+/*
+public void OnEntityCreated(int iEnt, char classname[32])
+{
+	PrintToChatAll(classname);
+	if(StrEqual(classname,"info_particle_system")) {
+		PrintToChatAll("%s IS A PARTICLE SYSTEM", classname);
+		char effect_name[32];
+		GetEntPropString(iEnt, Prop_Send, "effect_name", effect_name, sizeof(effect_name), 0);
+		if(StrEqual("crit_text", effect_name)) {
+			PrintToChatAll("CRIT");
+		}
+	}
 }
 */
 
@@ -787,12 +837,12 @@ public Action:UpdateTimers(Handle:timer)
 		{
 			if (IsValidClient(i, false))
 			{
-				SetHudTextParams(-1.0, 0.15, 2.0, 0, 0, 255, 255);
+				SetHudTextParams(-1.0, 0.20, 2.0, 0, 0, 255, 255);
 				ShowSyncHudText(i, hudTimer, "%s", FormatTimer(timerTime));
 				
 				if (isLRActive)
 				{
-					SetHudTextParams(-1.0, 0.20, 2.0, 255, 0, 0, 255);
+					SetHudTextParams(-1.0, 0.25, 2.0, 255, 0, 0, 255);
 					ShowSyncHudText(i, hudLRTimer, "LR Time: %s", FormatTimer(LRtime));
 				}
 			}
@@ -800,6 +850,11 @@ public Action:UpdateTimers(Handle:timer)
 	}
 	if (roundGoing && GetConVarBool(g_jbIsEnabled))
 	{
+		PrintToServer("timer tick");
+		if(GetClientCount() < 2) {
+			roundGoing = false;
+		}
+		
 		if (timerTime > 0.0)
 		{
 			if (timerTime <= 10.0)
