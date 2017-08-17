@@ -19,11 +19,6 @@
 
 #define DEBUG
 
-// VoiceHook
-#undef REQUIRE_PLUGIN
-#include <voiceannounce_ex>
-#define REQUIRE_PLUGIN
-
 #define PLUGIN_AUTHOR "HUNcamper"
 #define PLUGIN_VERSION "1.0.0"
 
@@ -62,18 +57,13 @@ float LRtime;
 float timerTime;
 bool gameEnd;
 bool roundGoing;
-//bool nextRoundBalance; // unused
-//char LRtext[32];
 
 // Entity variables (they store the entity ID, not the entity itself)
 new ent_stalemate;
 
 // HUD elements
 Handle hudLRTimer;
-Handle hudTimer;
-
-// Client Arrays
-//Handle jbHUD[MAXPLAYERS + 1]; // Each player's HUD timer
+Handle hudTimer; 
 
 public Plugin myinfo = 
 {
@@ -139,7 +129,6 @@ public void OnPluginStart()
 	HookEvent("arena_round_start", arena_round_start);
 	HookEvent("player_death", Player_Death);
 	HookEvent("player_spawn", player_spawn);
-	//HookEvent("player_team", player_team, EventHookMode_Pre);
 	HookEvent("teamplay_round_stalemate", EndGame_StaleMate);
 	HookEvent("teamplay_round_win", EndGame_Win);
 	
@@ -150,10 +139,10 @@ public void OnPluginStart()
 	// O T H E R //
 	LoadTranslations("common.phrases"); // Load common translation file
 	
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		OnClientPostAdminCheck(i);
-	}
+	//for (int i = 1; i <= MaxClients; i++)
+	//{
+	//	OnClientPostAdminCheck(i);
+	//}
 	
 	PrintToChatAll("\x05JailBreak Plugin\x01 loaded, restarting game");
 	ServerCommand("mp_restartgame 1");
@@ -164,18 +153,6 @@ public void OnPluginStart()
 	
 	reloadConfig();
 }
-
-/*
-#if defined _voiceannounceex_included_
-///////////////
-// V O I C E //
-///////////////
-public void OnClientSpeakingEx(client)
-{
-	PrintToChatAll("Nigga");
-}
-#endif
-*/
 
 ///////////////////////////////
 // C R I T   M O D I F I E R //
@@ -247,11 +224,10 @@ public reloadConfig()
 //
 // - Check if someone connected
 //
-public OnClientPostAdminCheck(client)
-{
-	//if(IsValidClient(client, false) && client != 0)
-	//jbHUD[client] = CreateTimer(5.0, DrawHud, client); // Create a HUD timer for the player
-}
+//public OnClientPostAdminCheck(client)
+//{
+	
+//}
 
 //////////////////////////////////////////
 // C L I E N T  D I S C O N N E C T E D //
@@ -266,78 +242,6 @@ public void OnClientDisconnect(int client)
 	
 	
 }
-
-/*
-////////////////////
-// D R A W  H U D //
-////////////////////
-//
-// - Draw the timer hud
-//
-public Action:DrawHud(Handle:timer, any:client)
-{
-	
-	if(GetConVarBool(g_jbIsEnabled))
-	{
-		if(IsValidClient(client))
-		{
-			SetHudTextParams(-1.0, 0.10, 2.0, 0, 0, 255, 255);
-			ShowSyncHudText(client, hudTimer, "%s", FormatTimer(timerTime));
-			
-			if(isLRActive)
-			{
-				SetHudTextParams(-1.0, 0.15, 2.0, 255, 0, 0, 255);
-				ShowSyncHudText(client, hudLRTimer, "LR timer: %s", FormatTimer(LRtime));
-			}
-		}
-	}
-	
-	//jbHUD[client] = CreateTimer(1.0, DrawHud, client);
-}
-*/
-
-/*
-public void OnEntityCreated(int iEnt, char classname[32])
-{
-	PrintToChatAll(classname);
-	if(StrEqual(classname,"info_particle_system")) {
-		PrintToChatAll("%s IS A PARTICLE SYSTEM", classname);
-		char effect_name[32];
-		GetEntPropString(iEnt, Prop_Send, "effect_name", effect_name, sizeof(effect_name), 0);
-		if(StrEqual("crit_text", effect_name)) {
-			PrintToChatAll("CRIT");
-		}
-	}
-}
-*/
-
-///////////////////////////////////////////////////
-// D E L E T E   S O U L S / A M M O   P A C K S //
-///////////////////////////////////////////////////
-//
-// - Delete the souls or ammo packs when killed
-//
-/*
-public void OnEntityCreated(int iEnt, char classname[32])
-{
-	if (GetConVarBool(g_jbIsEnabled) && (GetConVarBool(g_jbSoulRemove) || GetConVarBool(g_jbAmmoRemove)))
-	{
-		if (IsValidEntity(iEnt))
-		{
-			if (GetConVarBool(g_jbSoulRemove) && StrEqual(classname, "halloween_souls_pack"))
-			{
-				AcceptEntityInput(iEnt, "Kill");
-				PrintToChatAll("%s", classname);
-			} 
-			else if(GetConVarBool(g_jbAmmoRemove) && StrEqual(classname, "tf_ammo_pack"))
-			{
-				AcceptEntityInput(iEnt, "Kill");
-				PrintToChatAll("%s", classname);
-			} 
-		}
-	}
-}
-*/
 
 /////////////////////////////////////////
 // C M D :   R E L O A D   C O N F I G //
@@ -487,10 +391,6 @@ public Action:Command_Jointeam(client, args)
 {
 	if (GetConVarBool(g_jbIsEnabled) && GetConVarBool(g_jbTeamBalance))
 	{
-		// old stuff, for event
-		//new client = GetClientOfUserId(GetEventInt(event, "userid"));
-		//new oldteam = GetEventInt(event, "oldteam");
-		//new newteam = GetEventInt(event, "team");
 		
 		decl String:buffer[10], newteam, oldteam;
 		GetCmdArg(1,buffer,sizeof(buffer));
@@ -684,7 +584,6 @@ public StripAmmo(int client)
 		{
 			char name[64];
 			GetEdictClassname(secondary, name, sizeof(name));
-			//PrintToChatAll("secondary: %s", name);
 			new iOffset = GetEntProp(secondary, Prop_Send, "m_iPrimaryAmmoType", 1) * 4;
 			new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
 			SetEntData(client, iAmmoTable + iOffset, 0, 4, true);
@@ -705,7 +604,6 @@ public StripAmmo(int client)
 		{
 			char name[64];
 			GetEdictClassname(melee, name, sizeof(name));
-			//PrintToChatAll("melee: %s", name);
 			new iOffset = GetEntProp(melee, Prop_Send, "m_iPrimaryAmmoType", 1) * 4;
 			new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
 			SetEntData(client, iAmmoTable + iOffset, 0, 4, true);
@@ -758,11 +656,9 @@ public Action:timer_teamcheck(Handle:timer)
 	if(roundGoing)
 	{
 		int red = CheckTeamNum(TF_TEAM_RED);
-		//PrintToChatAll("RED: %i", red);
 		if (red == 1)
 		{
 			isLRActive = true;
-			//CreateTimer(1.0, updateLR);
 		}
 	}
 }
@@ -831,26 +727,29 @@ String:FormatTimer(float sec)
 //
 public Action:UpdateTimers(Handle:timer)
 {
-	for (int i = 1; i < MaxClients; i++)
+	// If there is only 1 player, don't show the timer
+	if(GetClientCount() > 1)
 	{
-		if (GetConVarBool(g_jbIsEnabled) && !gameEnd)
+		for (int i = 1; i < MaxClients; i++)
 		{
-			if (IsValidClient(i, false))
+			if (GetConVarBool(g_jbIsEnabled) && !gameEnd)
 			{
-				SetHudTextParams(-1.0, 0.20, 2.0, 0, 0, 255, 255);
-				ShowSyncHudText(i, hudTimer, "%s", FormatTimer(timerTime));
-				
-				if (isLRActive)
+				if (IsValidClient(i, false))
 				{
-					SetHudTextParams(-1.0, 0.25, 2.0, 255, 0, 0, 255);
-					ShowSyncHudText(i, hudLRTimer, "LR Time: %s", FormatTimer(LRtime));
+					SetHudTextParams(-1.0, 0.20, 2.0, 0, 0, 255, 255);
+					ShowSyncHudText(i, hudTimer, "%s", FormatTimer(timerTime));
+					
+					if (isLRActive)
+					{
+						SetHudTextParams(-1.0, 0.25, 2.0, 255, 0, 0, 255);
+						ShowSyncHudText(i, hudLRTimer, "LR Time: %s", FormatTimer(LRtime));
+					}
 				}
 			}
 		}
 	}
 	if (roundGoing && GetConVarBool(g_jbIsEnabled))
 	{
-		PrintToServer("timer tick");
 		if(GetClientCount() < 2) {
 			roundGoing = false;
 		}
@@ -905,8 +804,6 @@ public CreateStaleMate()
 		AcceptEntityInput(ent_stalemate, "SetTeam");
 		if (!DispatchSpawn(ent_stalemate))
 			PrintToServer("[JAILBREAK] ENTITY ERROR Failed to dispatch stalemate entity");
-		//else
-		//PrintToServer("[JAILBREAK] Created stalemate entity");
 	}
 }
 
