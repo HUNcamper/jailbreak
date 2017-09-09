@@ -38,7 +38,7 @@
 #include <tf2>
 #include <tf2_stocks>
 #include <kvizzle>
-//#include <sdkhooks>
+#include <sdkhooks>
 
 // Convars
 Handle g_jbTime;
@@ -50,6 +50,7 @@ Handle g_jbTeamBalance;
 Handle g_jbAutoBalance;
 Handle g_jbAmmoRemove;
 Handle g_jbCrits;
+Handle g_jbDroppedStrip;
 
 // Global variables
 bool isLRActive;
@@ -108,6 +109,7 @@ public void OnPluginStart()
 	g_jbTeamBalance = CreateConVar("jb_balance", "1", "Should the plugin balance the teams with the 1:3 ratio? (disallow reds from joining blue)");
 	g_jbAutoBalance = CreateConVar("jb_autobalance", "0", "Should the plugin autobalance the teams at the end of every round with the 1:3 ratio?");
 	g_jbCrits = CreateConVar("jb_crits", "1", "Should the plugin modify crits to be 100%?");
+	g_jbDroppedStrip = CreateConVar("jb_strip_from_dropped", "1", "Should the plugin strip the ammo from dropped weapons?");
 	
 	// V A R I A B L E S //
 	isLRActive = false;
@@ -128,6 +130,7 @@ public void OnPluginStart()
 	HookEvent("teamplay_round_start", teamplay_round_start);
 	HookEvent("arena_round_start", arena_round_start);
 	HookEvent("player_death", Player_Death);
+	//HookEvent("player_death", Player_Death_Pre, EventHookMode_Pre);
 	HookEvent("player_spawn", player_spawn);
 	HookEvent("teamplay_round_stalemate", EndGame_StaleMate);
 	HookEvent("teamplay_round_win", EndGame_Win);
@@ -144,6 +147,12 @@ public void OnPluginStart()
 	//	OnClientPostAdminCheck(i);
 	//}
 	
+	for (int iClient = 1; iClient <= MaxClients; iClient++) {
+        if (IsClientConnected(iClient) && IsClientInGame(iClient)) {
+            OnClientPutInServer(iClient);
+        }
+    }
+	
 	PrintToChatAll("\x05JailBreak Plugin\x01 loaded, restarting game");
 	ServerCommand("mp_restartgame 1");
 	
@@ -152,6 +161,50 @@ public void OnPluginStart()
 	Precache();
 	
 	reloadConfig();
+}
+
+public void OnClientPutInServer(int client) 
+{ 
+    SDKHook(client, SDKHook_WeaponCanUse, OnWeaponCanUse);
+}
+
+public Action OnWeaponCanUse(int client, int weapon)  
+{
+	if (GetConVarBool(g_jbIsEnabled))
+	{
+		if(roundGoing && GetConVarBool(g_jbDroppedStrip))
+		{
+			DataPack pack;
+			CreateDataTimer(0.1, OnWeaponCanUseTimed, pack);
+			pack.WriteCell(client);
+			pack.WriteCell(weapon);
+		}
+	}
+	return Plugin_Continue;
+}
+
+public Action OnWeaponCanUseTimed(Handle timer, Handle pack)
+{
+	char buffer[64];
+	
+	ResetPack(pack);
+	int client = ReadPackCell(pack);
+	int weapon = ReadPackCell(pack);
+	int slot = GetSlotFromPlayerWeapon(client, weapon);
+	
+	if(slot != -1)
+	{
+		GetEntityClassname(weapon, buffer, sizeof(buffer));
+		//PrintToChatAll("%N HAS PICKED UP WEAPON: %i, AT SLOT: %i, CLASSNAME: %s", client, weapon, slot, buffer);
+		
+		StripAmmo(client, slot);
+	}
+	else
+	{
+		PrintToServer("[JAILBREAK] %N has picked up a weapon to an invalid slot", client);
+	}
+	
+	return Plugin_Continue;
 }
 
 ///////////////////////////////
@@ -166,7 +219,7 @@ public Action:TF2_CalcIsAttackCritical(client, weapon, String:weaponname[], &boo
 	else
 	{
 		result = true;
-		return Plugin_Handled;	
+		return Plugin_Handled;
 	}
 }
 
@@ -545,7 +598,7 @@ public BalanceTeams()
 // -
 // - Strip all ammo from a player
 // -
-public StripAmmo(int client)
+stock StripAmmo(int client, int slot=-1)
 {
 	if (GetConVarBool(g_jbIsEnabled))
 	{
@@ -555,9 +608,9 @@ public StripAmmo(int client)
 		
 		if (!IsValidEntity(primary))
 		{
-			PrintToServer("[JAILBREAK] WARNING Invalid primary weapon slot: %i", primary);
+			//PrintToServer("[JAILBREAK] WARNING Invalid primary weapon slot: %i", primary);
 		}
-		else
+		else if(slot == 0 || slot == -1)
 		{
 			char name[64];
 			GetEdictClassname(primary, name, sizeof(name));
@@ -573,34 +626,40 @@ public StripAmmo(int client)
 			{
 				new iAmmoClip = FindSendPropInfo("CTFWeaponBase", "m_iClip1");
 				SetEntData(primary, iAmmoClip, 0, 4, true);
+				//PrintToServer("[JAILBREAK] Successfully stripped ammo from primary");
 			}
 		}
 		
 		if (!IsValidEntity(secondary))
 		{
-			PrintToServer("[JAILBREAK] WARNING Invalid secondary weapon slot: %i", secondary);
+			//PrintToServer("[JAILBREAK] WARNING Invalid secondary weapon slot: %i", secondary);
 		}
-		else
+		else if(slot == 1 || slot == -1)
 		{
 			char name[64];
 			GetEdictClassname(secondary, name, sizeof(name));
-			new iOffset = GetEntProp(secondary, Prop_Send, "m_iPrimaryAmmoType", 1) * 4;
-			new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
-			SetEntData(client, iAmmoTable + iOffset, 0, 4, true);
+			
+			//if (!StrEqual(name, "tf_weapon_jar") && !StrEqual(name, "tf_weapon_jar_milk") && !StrEqual(name, "tf_weapon_cleaver"))
+			//{
+				new iOffset = GetEntProp(secondary, Prop_Send, "m_iPrimaryAmmoType", 1) * 4;
+				new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
+				SetEntData(client, iAmmoTable + iOffset, 0, 4, true);
+			//}
 			
 			// Don't strip clip from a weapon that doesn't have a clip!
-			if (!StrEqual(name, "tf_weapon_flaregun") && !StrEqual(name, "tf_weapon_flaregun_revenge"))
+			if (!StrEqual(name, "tf_weapon_flaregun") && !StrEqual(name, "tf_weapon_flaregun_revenge") /*&& !StrEqual(name, "tf_weapon_jar") && !StrEqual(name, "tf_weapon_jar_milk") && !StrEqual(name, "tf_weapon_cleaver")*/)
 			{
 				new iAmmoClip = FindSendPropInfo("CTFWeaponBase", "m_iClip1");
 				SetEntData(secondary, iAmmoClip, 0, 4, true);
+				//PrintToServer("[JAILBREAK] Successfully stripped ammo from secondary");
 			}
 		}
 		
 		if (!IsValidEntity(melee))
 		{
-			PrintToServer("[JAILBREAK] WARNING Invalid melee weapon slot: %i", melee);
+			//PrintToServer("[JAILBREAK] WARNING Invalid melee weapon slot: %i", melee);
 		}
-		else
+		else if(slot == 2)
 		{
 			char name[64];
 			GetEdictClassname(melee, name, sizeof(name));
@@ -644,6 +703,23 @@ public Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 		}
 	}
 }
+
+/////////////////////////////////////////
+// P L A Y E R  K I L L E D  ( P R E ) //
+/////////////////////////////////////////
+// -
+// - Triggers when a player is killed (Pre), used for stripping ammo before dying
+// -
+/*
+public Player_Death_Pre(Handle:event, const String:name[], bool:dontBroadcast)
+{
+	if (GetConVarBool(g_jbIsEnabled))
+	{
+		int victim = GetClientOfUserId(GetEventInt(event, "userid"));
+		StripAmmo(victim);
+	}
+}
+*/
 
 //////////////////////////
 // C H E C K   T E A M S//
@@ -875,3 +951,20 @@ Precache()
 	PrecacheSound(SOUND_2SEC, true);
 	PrecacheSound(SOUND_1SEC, true);
 } 
+
+/////////////////
+// S T O C K S //
+/////////////////
+
+stock GetSlotFromPlayerWeapon(client, weapon)
+{
+	for (new i = 0; i <= 5; i++)
+	{
+		PrintToChatAll("Player: %N, Slot: %i, Weapon: %i == %i", client, i, GetPlayerWeaponSlot(client, i), weapon);
+		if (weapon == GetPlayerWeaponSlot(client, i))
+		{
+			return i;
+		}
+	}
+	return -1;
+}  
