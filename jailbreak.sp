@@ -39,6 +39,7 @@
 #include <tf2_stocks>
 #include <kvizzle>
 #include <sdkhooks>
+#include <smlib>
 
 // Convars
 Handle g_jbTime;
@@ -58,6 +59,10 @@ float LRtime;
 float timerTime;
 bool gameEnd;
 bool roundGoing;
+bool lateLoaded;
+
+// Player variables
+bool isStripped[MAXPLAYERS + 1];
 
 // Entity variables (they store the entity ID, not the entity itself)
 new ent_stalemate;
@@ -83,6 +88,7 @@ public Plugin myinfo =
 //
 public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
 {
+	lateLoaded = late;
 	if (GetEngineVersion() != Engine_TF2) // If game isn't TF2
 	{
 		Format(error, err_max, "This Jailbreak plugin is only working with Team Fortress 2."); // Error
@@ -130,10 +136,10 @@ public void OnPluginStart()
 	HookEvent("teamplay_round_start", teamplay_round_start);
 	HookEvent("arena_round_start", arena_round_start);
 	HookEvent("player_death", Player_Death);
-	//HookEvent("player_death", Player_Death_Pre, EventHookMode_Pre);
 	HookEvent("player_spawn", player_spawn);
 	HookEvent("teamplay_round_stalemate", EndGame_StaleMate);
 	HookEvent("teamplay_round_win", EndGame_Win);
+	HookEvent("post_inventory_application", event_PlayerResupply);
 	
 	// H U D   E L E M E N T S //
 	hudLRTimer = CreateHudSynchronizer();
@@ -151,6 +157,8 @@ public void OnPluginStart()
         if (IsClientConnected(iClient) && IsClientInGame(iClient)) {
             OnClientPutInServer(iClient);
         }
+        
+        isStripped[iClient] = false;
     }
 	
 	PrintToChatAll("\x05JailBreak Plugin\x01 loaded, restarting game");
@@ -205,6 +213,89 @@ public Action OnWeaponCanUseTimed(Handle timer, Handle pack)
 	}
 	
 	return Plugin_Continue;
+}
+
+public OnEntityCreated(entity, const String:classname[])
+{
+    if(StrContains(classname[1], "item_ammopack", false) != -1)
+    {
+        SDKHook(entity,    SDKHook_StartTouch,     Ammo_StartTouch);
+        //SDKHook(entity,    SDKHook_Touch,             Touch);
+    }
+}
+
+public OnConfigsExecuted()
+{
+	/******************
+	* On late load   *
+	******************/
+	if (lateLoaded)
+	{
+		new ent = -1;
+		
+		//Ehh you need to add code so it can also hook the other powerups, just using
+		//item_healthkit_full as a demonstration
+		while ((ent = FindEntityByClassname(ent, "item_ammopack_*")) != -1)
+		{
+			decl String:classname[64];
+			GetEntityClassname(ent, classname, sizeof(classname));
+			PrintToChatAll("%s", classname);
+			SDKHook(ent, SDKHook_StartTouch, Ammo_StartTouch);
+			//SDKHook(ent, SDKHook_Touch,             Touch);
+		}
+		
+		lateLoaded = false;
+	}
+}
+
+public Ammo_StartTouch(entity, client)
+{
+	decl String:classname[64];
+	GetEdictClassname(GetPlayerWeaponSlot(client, 0), classname, sizeof(classname));
+	
+	//int offset = Client_GetWeaponsOffset(client) + 4; // secondary weapon offset
+	//int weapon = GetEntDataEnt2(client, offset);
+	new secondary = GetPlayerWeaponSlot(client, 1);
+	TFClassType class = TF2_GetPlayerClass(client);
+	bool isOk = false;
+	
+	// Check if the user is with a class that has buggy weapons
+	if(isStripped[client] && (class == TFClass_Sniper || class == TFClass_Heavy || class == TFClass_Scout))
+	{
+		// Check if the user has those weapons
+		//new secondary = GetPlayerWeaponSlot(client, 1);
+		char name[64];
+		GetEdictClassname(secondary, name, sizeof(name));
+		
+		// Scout
+		if		(StrEqual(name, "tf_weapon_jar"))				isOk = true;
+		else if (StrEqual(name, "tf_weapon_jar_milk"))			isOk = true;
+		else if (StrEqual(name, "tf_weapon_lunchbox_drink"))	isOk = true;
+		else if (StrEqual(name, "tf_weapon_cleaver"))			isOk = true;
+		
+		// Heavy
+		else if (StrEqual(name, "tf_weapon_lunchbox"))			isOk = true;
+	}
+	
+	if (isOk)
+	{
+		// Set secondary ammo to 1
+		Client_SetWeaponPlayerAmmoEx(client, secondary, 1, 1);
+		
+		EmitSoundToClient(client, "player/recharged.wav", client, _, _, _, 1.0);
+		PrintToChat(client, "Your secondary has been recharged.");
+		
+		isStripped[client] = false;
+	}
+}
+
+/////////////////////////////////
+//P L A Y E R   R E S U P P L Y//
+/////////////////////////////////
+public event_PlayerResupply(Handle:event, const String:name[], bool:dontBroadcast)
+{
+	new client = GetClientOfUserId(GetEventInt(event, "userid"));
+	isStripped[client] = false;
 }
 
 ///////////////////////////////
@@ -386,9 +477,11 @@ public teamplay_round_start(Handle:event, const String:name[], bool:dontBroadcas
 		
 		for (int i = 0; i <= MaxClients; i++)
 		{
+			isStripped[i] = false;
 			if (IsValidClient(i) && GetClientTeam(i) == TF_TEAM_RED)
 			{
 				StripAmmo(i);
+				isStripped[i] = true;
 			}
 		}
 	}
@@ -602,6 +695,38 @@ stock StripAmmo(int client, int slot=-1)
 {
 	if (GetConVarBool(g_jbIsEnabled))
 	{
+		int offset = Client_GetWeaponsOffset(client) - 4;
+		
+		for (int i = 0; i < 2; i++)
+		{
+			offset += 4;
+	
+			int weapon = GetEntDataEnt2(client, offset);
+	
+			if (!IsValidEntity(weapon) || i == TFWeaponSlot_Melee)
+			{
+				continue;
+			}
+	
+			int clip = GetEntProp(weapon, Prop_Data, "m_iClip1");
+			if (clip != -1)
+			{
+				SetEntProp(weapon, Prop_Data, "m_iClip1", 0);
+			}
+	
+			clip = GetEntProp(weapon, Prop_Data, "m_iClip2");
+			if (clip != -1)
+			{
+				SetEntProp(weapon, Prop_Data, "m_iClip2", 0);
+			}
+	
+			Client_SetWeaponPlayerAmmoEx(client, weapon, 0, 0);
+			
+			isStripped[client] = true;
+		}
+		
+		// OLD METHOD
+		/*
 		new primary = GetPlayerWeaponSlot(client, 0);
 		new secondary = GetPlayerWeaponSlot(client, 1);
 		new melee = GetPlayerWeaponSlot(client, 2);
@@ -647,12 +772,12 @@ stock StripAmmo(int client, int slot=-1)
 			//}
 			
 			// Don't strip clip from a weapon that doesn't have a clip!
-			if (!StrEqual(name, "tf_weapon_flaregun") && !StrEqual(name, "tf_weapon_flaregun_revenge") /*&& !StrEqual(name, "tf_weapon_jar") && !StrEqual(name, "tf_weapon_jar_milk") && !StrEqual(name, "tf_weapon_cleaver")*/)
-			{
+			//if (!StrEqual(name, "tf_weapon_flaregun") && !StrEqual(name, "tf_weapon_flaregun_revenge") && !StrEqual(name, "tf_weapon_jar") && !StrEqual(name, "tf_weapon_jar_milk") && !StrEqual(name, "tf_weapon_cleaver"))
+			//{
 				new iAmmoClip = FindSendPropInfo("CTFWeaponBase", "m_iClip1");
 				SetEntData(secondary, iAmmoClip, 0, 4, true);
 				//PrintToServer("[JAILBREAK] Successfully stripped ammo from secondary");
-			}
+			//}
 		}
 		
 		if (!IsValidEntity(melee))
@@ -667,6 +792,7 @@ stock StripAmmo(int client, int slot=-1)
 			new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
 			SetEntData(client, iAmmoTable + iOffset, 0, 4, true);
 		}
+		*/
 	}
 }
 
@@ -681,25 +807,27 @@ public Player_Death(Handle:event, const String:name[], bool:dontBroadcast)
 	if (GetConVarBool(g_jbIsEnabled))
 	{
 		CreateTimer(0.5, timer_teamcheck);
-		int ammopack = -1;
-		int soul = -1;
-		int victim = GetClientOfUserId(GetEventInt(event, "userid"));
 		
 		if(GetConVarBool(g_jbAmmoRemove))
 		{
-		    while ((ammopack = FindEntityByClassname(ammopack, "tf_ammo_pack")) != -1)
-		    {
+			int victim = GetClientOfUserId(GetEventInt(event, "userid"));
+			int ammopack = -1;
+			
+			while ((ammopack = FindEntityByClassname(ammopack, "tf_ammo_pack")) != -1)
+			{
 				if(GetEntPropEnt(ammopack, Prop_Send, "m_hOwnerEntity") == victim)
 					AcceptEntityInput(ammopack, "Kill");
-		    }
+			}
 		}
 		
 		if(GetConVarBool(g_jbSoulRemove))
 		{
-		    while ((soul = FindEntityByClassname(soul, "halloween_souls_pack")) != -1)
-		    {
+			int soul = -1;
+			
+			while ((soul = FindEntityByClassname(soul, "halloween_souls_pack")) != -1)
+			{
 				AcceptEntityInput(soul, "Kill");
-		    }
+			}
 		}
 	}
 }
