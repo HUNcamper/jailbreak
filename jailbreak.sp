@@ -239,7 +239,7 @@ public OnConfigsExecuted()
 		{
 			decl String:classname[64];
 			GetEntityClassname(ent, classname, sizeof(classname));
-			PrintToChatAll("%s", classname);
+			//PrintToChatAll("%s", classname);
 			SDKHook(ent, SDKHook_StartTouch, Ammo_StartTouch);
 			//SDKHook(ent, SDKHook_Touch,             Touch);
 		}
@@ -485,6 +485,17 @@ public teamplay_round_start(Handle:event, const String:name[], bool:dontBroadcas
 			}
 		}
 	}
+	
+	new ent = -1;
+	
+	while ((ent = FindEntityByClassname(ent, "item_ammopack_*")) != -1)
+	{
+		decl String:classname[64];
+		GetEntityClassname(ent, classname, sizeof(classname));
+		//PrintToChatAll("hooked %s", classname);
+		SDKHook(ent, SDKHook_StartTouch, Ammo_StartTouch);
+		//SDKHook(ent, SDKHook_Touch,             Touch);
+	}
 }
 
 /////////////////////////////
@@ -635,50 +646,61 @@ public BalanceTeams()
 		// If the balance is enabled (, and a balance was set for the next round) <- not used anymore
 		if(GetConVarBool(g_jbTeamBalance) && GetConVarBool(g_jbAutoBalance)) //&& nextRoundBalance)
 		{
-			new red = RoundToFloor(GetTeamClientCount(TF_TEAM_RED) / 3.0), 
-			redminus = RoundToFloor((GetTeamClientCount(TF_TEAM_RED)-1.0) / 3.0),
-			blue = GetTeamClientCount(TF_TEAM_BLU);
-			//PrintToChatAll("%f > %i", red, blue);
-			new reds[32], blus[32], a, b;
-			
-			a = 0;
-			b = 0;
-			
-			for (int i = 1; i < MaxClients; i++)
+			while(true)
 			{
-				if (IsValidClient(i, false))
+				new red = RoundToFloor(GetTeamClientCount(TF_TEAM_RED) / 3.0), 
+				redminus = RoundToFloor((GetTeamClientCount(TF_TEAM_RED)-1.0) / 3.0),
+				blue = GetTeamClientCount(TF_TEAM_BLU);
+				//PrintToChatAll("%f > %i", red, blue);
+				new reds[32], blus[32], a, b;
+				
+				a = 0;
+				b = 0;
+				
+				for (int i = 1; i < MaxClients; i++)
 				{
-					if (GetClientTeam(i) == TF_TEAM_RED)
+					if (IsValidClient(i, false))
 					{
-						reds[a] = i;
-						a++;
-					}
-					else if (GetClientTeam(i) == TF_TEAM_BLU)
-					{
-						blus[b] = i;
-						b++;
+						if (GetClientTeam(i) == TF_TEAM_RED)
+						{
+							reds[a] = i;
+							a++;
+						}
+						else if (GetClientTeam(i) == TF_TEAM_BLU)
+						{
+							blus[b] = i;
+							b++;
+						}
 					}
 				}
-			}
-			
-			if(redminus > blue)
-			{
-				int substraction = red - blue;
-				for (int i = 0; i < substraction; i++)
+				
+				if(redminus > blue)
 				{
+					//int substraction = red - blue;
+					//for (int i = 0; i < substraction; i++)
+					//{
+					PrintToServer("Autobalancing %N", reds[a - 1]);
 					PrintToChat(reds[a-1], "[JAILBREAK] You have been auto balanced.");
 					TF2_ChangeClientTeam(reds[a-1], TFTeam_Blue);
 					a--;
+					//}
 				}
-			}
-			else if(blue > red)
-			{
-				int substraction = blue - red;
-				for (int i = 0; i < substraction; i++)
+				else if(blue > red)
 				{
+					//int substraction = blue - red;
+					//for (int i = 0; i < substraction; i++)
+					//{
+					PrintToServer("Autobalancing %N", blus[b - 1]);
 					PrintToChat(blus[b-1], "[JAILBREAK] You have been auto balanced.");
 					TF2_ChangeClientTeam(blus[b-1], TFTeam_Red);
 					b--;
+					//}
+				}
+				else
+				{
+					PrintToServer("DONE BALANCING");
+					// Done
+					return;
 				}
 			}
 		}
@@ -1088,7 +1110,7 @@ stock GetSlotFromPlayerWeapon(client, weapon)
 {
 	for (new i = 0; i <= 5; i++)
 	{
-		PrintToChatAll("Player: %N, Slot: %i, Weapon: %i == %i", client, i, GetPlayerWeaponSlot(client, i), weapon);
+		//PrintToChatAll("Player: %N, Slot: %i, Weapon: %i == %i", client, i, GetPlayerWeaponSlot(client, i), weapon);
 		if (weapon == GetPlayerWeaponSlot(client, i))
 		{
 			return i;
