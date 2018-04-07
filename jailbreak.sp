@@ -276,6 +276,11 @@ public Ammo_StartTouch(entity, client)
 		// Heavy
 		else if (StrEqual(name, "tf_weapon_lunchbox"))			isOk = true;
 	}
+	else if (isStripped[client] && class == TFClass_DemoMan)
+	{
+		// Enable demo shield
+		SetEntPropFloat(client, Prop_Send, "m_flChargeMeter", 100.0);
+	}
 	
 	if (isOk)
 	{
@@ -283,10 +288,10 @@ public Ammo_StartTouch(entity, client)
 		Client_SetWeaponPlayerAmmoEx(client, secondary, 1, 1);
 		
 		EmitSoundToClient(client, "player/recharged.wav", client, _, _, _, 1.0);
-		PrintToChat(client, "Your secondary has been recharged.");
-		
-		isStripped[client] = false;
+		//PrintToChat(client, "Your secondary has been recharged.");
 	}
+	
+	isStripped[client] = false;
 }
 
 /////////////////////////////////
@@ -741,11 +746,15 @@ stock StripAmmo(int client, int slot=-1)
 			{
 				SetEntProp(weapon, Prop_Data, "m_iClip2", 0);
 			}
-	
+			
+			// Disable demo shield
+			SetEntPropFloat(client, Prop_Send, "m_flChargeMeter", 0.0);
+
 			Client_SetWeaponPlayerAmmoEx(client, weapon, 0, 0);
 			
-			isStripped[client] = true;
 		}
+		
+		isStripped[client] = true;
 		
 		// OLD METHOD
 		/*
@@ -953,6 +962,18 @@ String:FormatTimer(float sec)
 //
 public Action:UpdateTimers(Handle:timer)
 {
+	// Keep disabling the demo shield for stripped players
+	for (int i = 1; i < MaxClients; i++)
+	{
+		if (IsValidClient(i, false))
+		{
+			if (isStripped[i])
+			{
+				SetEntPropFloat(i, Prop_Send, "m_flChargeMeter", 0.0);
+			}
+		}
+	}
+	
 	// If there is only 1 player, don't show the timer
 	if(GetClientCount() > 1)
 	{
