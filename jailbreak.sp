@@ -260,7 +260,7 @@ public Ammo_StartTouch(entity, client)
 	bool isOk = false;
 	
 	// Check if the user is with a class that has buggy weapons
-	if(isStripped[client] && (class == TFClass_Sniper || class == TFClass_Heavy || class == TFClass_Scout))
+	if(isStripped[client] && (class == TFClass_Sniper || class == TFClass_Heavy || class == TFClass_Scout || class == TFClass_Soldier))
 	{
 		// Check if the user has those weapons
 		//new secondary = GetPlayerWeaponSlot(client, 1);
@@ -275,6 +275,9 @@ public Ammo_StartTouch(entity, client)
 		
 		// Heavy
 		else if (StrEqual(name, "tf_weapon_lunchbox"))			isOk = true;
+		
+		// Soldier
+		else if (StrEqual(name, "tf_weapon_raygun"))			isOk = true;
 	}
 	else if (isStripped[client] && class == TFClass_DemoMan)
 	{
@@ -679,32 +682,39 @@ public BalanceTeams()
 					}
 				}
 				
-				if(redminus > blue)
+				if (a + b > 3)
 				{
-					//int substraction = red - blue;
-					//for (int i = 0; i < substraction; i++)
-					//{
-					PrintToServer("Autobalancing %N", reds[a - 1]);
-					PrintToChat(reds[a-1], "[JAILBREAK] You have been auto balanced.");
-					TF2_ChangeClientTeam(reds[a-1], TFTeam_Blue);
-					a--;
-					//}
-				}
-				else if(blue > red)
-				{
-					//int substraction = blue - red;
-					//for (int i = 0; i < substraction; i++)
-					//{
-					PrintToServer("Autobalancing %N", blus[b - 1]);
-					PrintToChat(blus[b-1], "[JAILBREAK] You have been auto balanced.");
-					TF2_ChangeClientTeam(blus[b-1], TFTeam_Red);
-					b--;
-					//}
+					if(redminus > blue)
+					{
+						//int substraction = red - blue;
+						//for (int i = 0; i < substraction; i++)
+						//{
+						PrintToServer("Autobalancing %N", reds[a - 1]);
+						PrintToChat(reds[a-1], "[JAILBREAK] You have been auto balanced.");
+						TF2_ChangeClientTeam(reds[a-1], TFTeam_Blue);
+						a--;
+						//}
+					}
+					else if(blue > red)
+					{
+						//int substraction = blue - red;
+						//for (int i = 0; i < substraction; i++)
+						//{
+						PrintToServer("Autobalancing %N", blus[b - 1]);
+						PrintToChat(blus[b-1], "[JAILBREAK] You have been auto balanced.");
+						TF2_ChangeClientTeam(blus[b-1], TFTeam_Red);
+						b--;
+						//}
+					}
+					else
+					{
+						PrintToServer("DONE BALANCING");
+						// Done
+						return;
+					}
 				}
 				else
 				{
-					PrintToServer("DONE BALANCING");
-					// Done
 					return;
 				}
 			}
