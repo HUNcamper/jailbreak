@@ -253,39 +253,78 @@ public Ammo_StartTouch(entity, client)
 	decl String:classname[64];
 	GetEdictClassname(GetPlayerWeaponSlot(client, 0), classname, sizeof(classname));
 	
-	//int offset = Client_GetWeaponsOffset(client) + 4; // secondary weapon offset
-	//int weapon = GetEntDataEnt2(client, offset);
+	new primary =   GetPlayerWeaponSlot(client, 0);
 	new secondary = GetPlayerWeaponSlot(client, 1);
-	TFClassType class = TF2_GetPlayerClass(client);
-	bool isOk = false;
+	bool giveSecondary = false;
 	
-	// Check if the user is with a class that has buggy weapons
-	if(isStripped[client] && (class == TFClass_Sniper || class == TFClass_Heavy || class == TFClass_Scout || class == TFClass_Soldier))
+	if(isStripped[client])
 	{
-		// Check if the user has those weapons
-		//new secondary = GetPlayerWeaponSlot(client, 1);
-		char name[64];
-		GetEdictClassname(secondary, name, sizeof(name));
+		// PRIMARY WEAPONS
+		
+		char primaryname[64];
+		GetEdictClassname(primary, primaryname, sizeof(primaryname));
+		
+		// Cow Mangler, Pomson
+		if (StrEqual(primaryname, "tf_weapon_particle_cannon") || StrEqual(primaryname, "tf_weapon_drg_pomson"))
+		{
+			if (IsValidEntity(primary))
+			{
+				int clip = GetEntProp(primary, Prop_Data, "m_iClip1");
+				if (clip != -1)
+				{
+					SetEntProp(primary, Prop_Data, "m_iClip1", 1);
+				}
+			
+				clip = GetEntProp(primary, Prop_Data, "m_iClip2");
+				if (clip != -1)
+				{
+					SetEntProp(primary, Prop_Data, "m_iClip2", 1);
+				}
+			
+				Client_SetWeaponPlayerAmmoEx(client, primary, 1, 1);
+			}
+		}
+		
+		// SECONDARY WEAPONS
+		
+		char secondaryname[64];
+		GetEdictClassname(secondary, secondaryname, sizeof(secondaryname));
 		
 		// Scout
-		if		(StrEqual(name, "tf_weapon_jar"))				isOk = true;
-		else if (StrEqual(name, "tf_weapon_jar_milk"))			isOk = true;
-		else if (StrEqual(name, "tf_weapon_lunchbox_drink"))	isOk = true;
-		else if (StrEqual(name, "tf_weapon_cleaver"))			isOk = true;
+		if		(StrEqual(secondaryname, "tf_weapon_jar"))				giveSecondary = true;
+		else if (StrEqual(secondaryname, "tf_weapon_jar_milk"))			giveSecondary = true;
+		else if (StrEqual(secondaryname, "tf_weapon_lunchbox_drink"))	giveSecondary = true;
+		else if (StrEqual(secondaryname, "tf_weapon_cleaver"))			giveSecondary = true;
 		
 		// Heavy
-		else if (StrEqual(name, "tf_weapon_lunchbox"))			isOk = true;
+		else if (StrEqual(secondaryname, "tf_weapon_lunchbox"))			giveSecondary = true;
 		
-		// Soldier
-		else if (StrEqual(name, "tf_weapon_raygun"))			isOk = true;
-	}
-	else if (isStripped[client] && class == TFClass_DemoMan)
-	{
+		// Soldier's Bison
+		else if (StrEqual(secondaryname, "tf_weapon_raygun"))
+		{
+			if (IsValidEntity(secondary))
+			{
+				int clip = GetEntProp(secondary, Prop_Data, "m_iClip1");
+				if (clip != -1)
+				{
+					SetEntProp(secondary, Prop_Data, "m_iClip1", 1);
+				}
+			
+				clip = GetEntProp(secondary, Prop_Data, "m_iClip2");
+				if (clip != -1)
+				{
+					SetEntProp(secondary, Prop_Data, "m_iClip2", 1);
+				}
+			
+				Client_SetWeaponPlayerAmmoEx(client, secondary, 1, 1);
+			}
+		}
+		
 		// Enable demo shield
 		SetEntPropFloat(client, Prop_Send, "m_flChargeMeter", 100.0);
 	}
 	
-	if (isOk)
+	if (giveSecondary)
 	{
 		// Set secondary ammo to 1
 		Client_SetWeaponPlayerAmmoEx(client, secondary, 1, 1);
