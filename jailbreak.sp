@@ -40,6 +40,7 @@
 #include <kvizzle>
 #include <sdkhooks>
 #include <smlib>
+//#include <voiceannounce_ex>
 
 // Convars
 Handle g_jbTime;
@@ -296,11 +297,14 @@ public Ammo_StartTouch(entity, client)
 		else if (StrEqual(secondaryname, "tf_weapon_lunchbox_drink"))	giveSecondary = true;
 		else if (StrEqual(secondaryname, "tf_weapon_cleaver"))			giveSecondary = true;
 		
+		// Pyro
+		else if (StrEqual(secondaryname, "tf_weapon_jar_gas"))			giveSecondary = true;
+		
 		// Heavy
 		else if (StrEqual(secondaryname, "tf_weapon_lunchbox"))			giveSecondary = true;
 		
 		// Soldier's Bison
-		else if (StrEqual(secondaryname, "tf_weapon_raygun"))
+		else if (StrEqual(secondaryname, "tf_weapon_raygun") || StrEqual(secondaryname, "tf_weapon_flaregun_revenge"))
 		{
 			if (IsValidEntity(secondary))
 			{
@@ -1171,6 +1175,11 @@ Precache()
 	PrecacheSound(SOUND_2SEC, true);
 	PrecacheSound(SOUND_1SEC, true);
 } 
+
+public OnClientSpeakingEx(int client)
+{
+	PrintToChatAll("%N microphone verified", client);
+}
 
 /////////////////
 // S T O C K S //
