@@ -132,6 +132,8 @@ public void OnPluginStart()
 	
 	// C O M M A N D S //
 	RegConsoleCmd("jointeam", Command_Jointeam);
+	RegConsoleCmd("sm_lr", Command_JB_LR);
+	RegConsoleCmd("sm_w", Command_JB_Warden);
 	
 	// H O O K S //
 	HookEvent("teamplay_round_start", teamplay_round_start);
@@ -450,6 +452,30 @@ public Action:Command_JB_ReloadConfig(client, args)
 	return Plugin_Handled;
 }
 
+///////////////////////////////////////
+// C M D :   L A S T   R E Q U E S T //
+///////////////////////////////////////
+//
+// - LR command
+//
+public Action:Command_JB_LR(client, args)
+{
+	PrintCenterText(client, "There is no LR command.");
+	return Plugin_Handled;
+}
+
+///////////////////////////
+// C M D :   W A R D E N //
+///////////////////////////
+//
+// - Warden command
+//
+public Action:Command_JB_Warden(client, args)
+{
+	PrintCenterText(client, "CT side decides on who gives orders. There is no warden.");
+	return Plugin_Handled;
+}
+
 ///////////////////////////////////
 // C M D :   S T R I P   A M M O //
 ///////////////////////////////////
@@ -648,7 +674,7 @@ public Action:Command_Jointeam(client, args)
 		if(!allow)
 		{
 			//TF2_ChangeClientTeam(client, TFTeam_Red);
-			PrintCenterText(client, "Not enough REDs to join BLU");
+			PrintCenterText(client, "Not enough Ts to join CT side");
 			return Plugin_Handled;
 		}
 	}
