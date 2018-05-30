@@ -40,6 +40,7 @@
 #include <kvizzle>
 #include <sdkhooks>
 #include <smlib>
+#include <SteamWorks>
 //#include <voiceannounce_ex>
 
 // Convars
@@ -172,6 +173,22 @@ public void OnPluginStart()
 	Precache();
 	
 	reloadConfig();
+}
+
+bool steamworks = false;
+
+public void OnAllPluginsLoaded()
+{
+	// S T E A M W O R K S //
+	steamworks = LibraryExists("SteamWorks");
+	if(steamworks)
+	{
+		SteamWorks_SetGameDescription("Jailbreak");
+	}
+	else
+	{
+		PrintToServer("[JAILBREAK] SteamWorks is not loaded, ignoring");
+	}
 }
 
 public void OnClientPutInServer(int client) 
