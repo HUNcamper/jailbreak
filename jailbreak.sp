@@ -489,7 +489,7 @@ public Action:Command_JB_LR(client, args)
 //
 public Action:Command_JB_Warden(client, args)
 {
-	PrintCenterText(client, "CT side decides on who gives orders. There is no warden.");
+	PrintCenterText(client, "CT side decides on who gives orders, there is no warden.");
 	return Plugin_Handled;
 }
 
@@ -691,7 +691,7 @@ public Action:Command_Jointeam(client, args)
 		if(!allow)
 		{
 			//TF2_ChangeClientTeam(client, TFTeam_Red);
-			PrintCenterText(client, "Not enough Ts to join CT side");
+			PrintCenterText(client, "Not enough Ts to join CT side.");
 			return Plugin_Handled;
 		}
 	}
