@@ -25,6 +25,8 @@
 // Constant variables
 #define TF_TEAM_BLU			3
 #define TF_TEAM_RED			2
+#define TF_TEAM_SPEC		1
+
 
 #define SOUND_10SEC			"vo/announcer_ends_10sec.mp3"
 #define SOUND_5SEC			"vo/announcer_ends_5sec.mp3"
@@ -650,7 +652,7 @@ public Action:Command_Jointeam(client, args)
 		
 		if(strlen(buffer) == 0) return Plugin_Handled; // If nothing was given, break the command
 		else if (StrEqual(buffer, "blue", false)) newteam = TF_TEAM_BLU;
-		else if (StrEqual(buffer, "spectator", false)) return Plugin_Continue;
+		else if (StrEqual(buffer, "spectate", false)) return Plugin_Continue;
 		else newteam = TF_TEAM_RED; // Anything else seems to drop the player to red???
 		
 		oldteam = GetClientTeam(client);
